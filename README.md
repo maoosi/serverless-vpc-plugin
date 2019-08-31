@@ -41,7 +41,7 @@ If your Lambda functions need to [access the internet](https://docs.aws.amazon.c
 
 By default, `AWS::EC2::VPCEndpoint` "Gateway" endpoints for S3 and DynamoDB will be provisioned within each availability zone to provide internal access to these services (there is no additional charge for using Gateway Type VPC endpoints). You can selectively control which `AWS::EC2::VPCEndpoint` "Interface" endpoints are available within your VPC using the `services` configuration option below. Not all AWS services are available in every region, so the plugin will query AWS to validate the services you have selected and notify you if any changes are required (there is an additional charge for using Interface Type VPC endpoints).
 
-If you specify more then one availability zone, this plugin will also provision the following database-related resources:
+If you specify more then one availability zone, this plugin will also provision the following database-related resources (controlled using the `subnetGroups` plugin option):
 
 - `AWS::RDS::DBSubnetGroup`
 - `AWS::ElastiCache::SubnetGroup`
@@ -99,19 +99,27 @@ custom:
     # Whether to create a NAT instance
     createNatInstance: false
 
-    # optionally specify AZs (defaults to auto-discover all availabile AZs)
+    # Optionally specify AZs (defaults to auto-discover all availabile AZs)
     zones:
       - us-east-1a
       - us-east-1b
       - us-east-1c
 
-    # by default, s3 and dynamodb endpoints will be available within the VPC
+    # By default, S3 and DynamoDB endpoints will be available within the VPC
     # see https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints.html
     # for a list of available service endpoints to provision within the VPC
     # (varies per region)
     services:
       - kms
       - secretsmanager
+
+    # Optionally specify subnet groups to create. If not provided, subnet groups
+    # for RDS, Redshift, ElasticCache and DAX will be provisioned.
+    subnetGroups:
+      - rds
+        
+    # Whether to export stack outputs so it may be consumed by other stacks 
+    exportOutputs: false
 ```
 
 ## CloudFormation Outputs
@@ -122,3 +130,13 @@ After executing `serverless deploy`, the following CloudFormation Stack Outputs 
 - `LambdaExecutionSecurityGroup`: Security Group logical resource ID that the Lambda functions use when executing within the VPC
 - `BastionSSHUser`: SSH username to access the bastion host, if provisioned
 - `BastionEIP`: Elastic IP address associated to the bastion host, if provisioned
+- `RDSSubnetGroup`: SubnetGroup associated to RDS, if provisioned 
+- `ElastiCacheSubnetGroup`: SubnetGroup associated to ElastiCache, if provisioned
+- `RedshiftSubnetGroup`: SubnetGroup associated to Redshift, if provisioned
+- `DAXSubnetGroup`: SubnetGroup associated to DAX, if provisioned
+- `AppSubnet{i}`: Each of the generated "Application" Subnets, where i is a 1 based index
+
+### Exporting CloudFormation Outputs
+Setting `exportOutputs: true` will export stack outputs.  
+The name of the exported value will be prefixed by the cloud formation stack name (`AWS::StackName`).
+For example, the value of the `VPC` output of a stack named `foo-prod` will be exported as `foo-prod-VPC`. 

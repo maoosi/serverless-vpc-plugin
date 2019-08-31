@@ -1,4 +1,4 @@
-const { DEFAULT_VPC_EIP_LIMIT, APP_SUBNET } = require('./constants');
+const { DEFAULT_VPC_EIP_LIMIT, APP_SUBNET, VALID_SUBNET_GROUPS } = require('./constants');
 const { splitSubnets } = require('./subnets');
 const { buildAvailabilityZones } = require('./az');
 const {
@@ -38,6 +38,8 @@ class ServerlessVpcPlugin {
     let createNatInstance = false;
     let createBastionHost = false;
     let bastionHostKeyName = null;
+    let exportOutputs = false;
+    let subnetGroups = VALID_SUBNET_GROUPS;
 
     const { vpcConfig } = this.serverless.service.custom;
 
@@ -70,6 +72,9 @@ class ServerlessVpcPlugin {
       if (Array.isArray(vpcConfig.services)) {
         services = vpcConfig.services.map(s => s.trim().toLowerCase());
       }
+      if (Array.isArray(vpcConfig.subnetGroups)) {
+        subnetGroups = vpcConfig.subnetGroups.map(s => s.trim().toLowerCase());
+      }
 
       if ('createDbSubnet' in vpcConfig && typeof vpcConfig.createDbSubnet === 'boolean') {
         ({ createDbSubnet } = vpcConfig);
@@ -100,6 +105,10 @@ class ServerlessVpcPlugin {
 
       if ('createNatInstance' in vpcConfig && typeof vpcConfig.createNatInstance === 'boolean') {
         ({ createNatInstance } = vpcConfig);
+      }
+
+      if ('exportOutputs' in vpcConfig && typeof vpcConfig.exportOutputs === 'boolean') {
+        ({ exportOutputs } = vpcConfig);
       }
     }
 
@@ -222,7 +231,13 @@ class ServerlessVpcPlugin {
       if (numZones < 2) {
         this.serverless.cli.log('WARNING: less than 2 AZs; skipping subnet group provisioning');
       } else {
-        Object.assign(resources, buildSubnetGroups(numZones));
+        const invalidGroup = subnetGroups.some(group => !VALID_SUBNET_GROUPS.includes(group));
+        if (invalidGroup) {
+          throw new this.serverless.classes.Error(
+            'WARNING: Invalid subnetGroups option. Valid options: rds, redshift, elasticache, dax',
+          );
+        }
+        Object.assign(resources, buildSubnetGroups(numZones, subnetGroups));
       }
     }
 
@@ -230,9 +245,6 @@ class ServerlessVpcPlugin {
       this.serverless.cli.log('Enabling VPC Flow Logs to S3');
       Object.assign(resources, buildLogBucket(), buildLogBucketPolicy(), buildVpcFlowLogs());
     }
-
-    const outputs = providerObj.compiledCloudFormationTemplate.Outputs;
-    Object.assign(outputs, buildOutputs(createBastionHost));
 
     this.serverless.cli.log('Updating Lambda VPC configuration');
     const { vpc = {} } = providerObj;
@@ -248,6 +260,13 @@ class ServerlessVpcPlugin {
     for (let i = 1; i <= numZones; i += 1) {
       vpc.subnetIds.push({ Ref: `${APP_SUBNET}Subnet${i}` });
     }
+
+    const outputs = providerObj.compiledCloudFormationTemplate.Outputs;
+    Object.assign(
+      outputs,
+      buildOutputs(createBastionHost, subnetGroups, vpc.subnetIds, exportOutputs),
+    );
+
     this.serverless.service.provider.vpc = vpc;
   }
 

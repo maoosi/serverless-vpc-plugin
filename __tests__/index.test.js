@@ -1,7 +1,4 @@
 const AWS = require('aws-sdk-mock');
-const AWS_SDK = require('aws-sdk');
-
-AWS.setSDKInstance(AWS_SDK);
 
 const Serverless = require('serverless');
 const AwsProvider = require('serverless/lib/plugins/aws/provider/awsProvider');
@@ -18,11 +15,25 @@ describe('ServerlessVpcPlugin', () => {
     };
     serverless = new Serverless(options);
     serverless.init();
+
     const provider = new AwsProvider(serverless, options);
+    AWS.setSDKInstance(provider.sdk);
     serverless.setProvider('aws', provider);
+
+    provider.cachedCredentials = {
+      credentials: {
+        accessKeyId: 'test',
+        secretAccessKey: 'test',
+      },
+    };
+
     serverless.service.provider = {
       name: 'aws',
       stage: 'dev',
+      credentials: {
+        accessKeyId: 'test',
+        secretAccessKey: 'test',
+      },
       compiledCloudFormationTemplate: {
         Resources: {},
         Outputs: {},
@@ -45,19 +56,20 @@ describe('ServerlessVpcPlugin', () => {
     });
 
     it('should initialize with empty options', () => {
-      plugin = new ServerlessVpcPlugin(serverless, {});
-      expect(plugin.serverless).toBeInstanceOf(Serverless);
-      expect(plugin.options).toEqual({});
+      const newPlugin = new ServerlessVpcPlugin(serverless, {});
+      expect(newPlugin.serverless).toBeInstanceOf(Serverless);
+      expect(newPlugin.options).toEqual({});
       expect.assertions(2);
     });
 
     it('should initialize with custom options', () => {
       const options = {
-        zones: ['us-west-2'],
+        zones: ['us-west-2a'],
+        services: [],
       };
-      plugin = new ServerlessVpcPlugin(serverless, options);
-      expect(plugin.serverless).toBeInstanceOf(Serverless);
-      expect(plugin.options).toEqual(options);
+      const newPlugin = new ServerlessVpcPlugin(serverless, options);
+      expect(newPlugin.serverless).toBeInstanceOf(Serverless);
+      expect(newPlugin.options).toEqual(options);
       expect.assertions(2);
     });
 
@@ -72,6 +84,7 @@ describe('ServerlessVpcPlugin', () => {
     it('should require a bastion key name', async () => {
       serverless.service.custom.vpcConfig = {
         createBastionHost: true,
+        services: [],
       };
 
       await expect(plugin.afterInitialize()).rejects.toThrow(
@@ -83,7 +96,8 @@ describe('ServerlessVpcPlugin', () => {
     it('createNatGateway should be either boolean or a number', async () => {
       serverless.service.custom.vpcConfig = {
         createNatGateway: 'hello',
-        zones: ['us-east-1'],
+        zones: ['us-east-1a'],
+        services: [],
       };
 
       await expect(plugin.afterInitialize()).rejects.toThrow(
@@ -109,13 +123,26 @@ describe('ServerlessVpcPlugin', () => {
       AWS.mock('EC2', 'describeAvailabilityZones', mockCallback);
 
       serverless.service.custom.vpcConfig = {
-        services: [], // remove default s3 and dynamodb
+        services: [],
       };
 
       const actual = await plugin.afterInitialize();
       expect(actual).toBeUndefined();
       expect(mockCallback).toHaveBeenCalled();
       expect.assertions(3);
+    });
+
+    it('rejects invalid subnet groups', async () => {
+      serverless.service.custom.vpcConfig = {
+        zones: ['us-east-1a', 'us-east-1b'],
+        subnetGroups: ['invalid'],
+        services: [],
+      };
+
+      await expect(plugin.afterInitialize()).rejects.toThrow(
+        'WARNING: Invalid subnetGroups option. Valid options: rds, redshift, elasticache, dax',
+      );
+      expect.assertions(1);
     });
   });
 

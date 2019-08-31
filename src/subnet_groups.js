@@ -133,19 +133,27 @@ function buildDAXSubnetGroup(numZones = 0, { name = 'DAXSubnetGroup' } = {}) {
  * Build the database subnet groups
  *
  * @param {Number} numZones Number of availability zones
+ * @param {Array} subnetGroups options of subnet groups
  * @return {Object}
  */
-function buildSubnetGroups(numZones = 0) {
+function buildSubnetGroups(numZones = 0, subnetGroups = []) {
   if (numZones < 2) {
     return {};
   }
-  return Object.assign(
-    {},
-    buildRDSSubnetGroup(numZones),
-    buildRedshiftSubnetGroup(numZones),
-    buildElastiCacheSubnetGroup(numZones),
-    buildDAXSubnetGroup(numZones),
-  );
+  if (!Array.isArray(subnetGroups) || subnetGroups.length < 1) {
+    return {};
+  }
+
+  const groupMapping = {
+    rds: buildRDSSubnetGroup,
+    redshift: buildRedshiftSubnetGroup,
+    elasticache: buildElastiCacheSubnetGroup,
+    dax: buildDAXSubnetGroup,
+  };
+
+  return subnetGroups.reduce((acc, cur) => {
+    return Object.assign(acc, groupMapping[cur.toLowerCase()](numZones));
+  }, {});
 }
 
 module.exports = {
