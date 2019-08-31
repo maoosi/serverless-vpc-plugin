@@ -240,6 +240,17 @@ function buildLambdaSecurityGroup({ name = 'LambdaExecutionSecurityGroup' } = {}
         VpcId: {
           Ref: 'VPC',
         },
+        SecurityGroupIngress: [
+          {
+            SourceSecurityGroupId: {
+              Ref: 'BastionSecurityGroup',
+            },
+            Description: 'Allow inbound MYSQL access from BastionSecurityGroup',
+            IpProtocol: 'tcp',
+            FromPort: 3306,
+            ToPort: 3306,
+          },
+        ],
         Tags: [
           {
             Key: 'Name',

@@ -260,6 +260,13 @@ function buildBastionSecurityGroup(sourceIp = '0.0.0.0/0', { name = 'BastionSecu
             CidrIp: sourceIp,
           },
           {
+            Description: 'Allow inbound MYSQL access to the bastion host',
+            IpProtocol: 'tcp',
+            FromPort: 3306,
+            ToPort: 3306,
+            CidrIp: sourceIp,
+          },
+          {
             Description: 'Allow inbound ICMP to the bastion host',
             IpProtocol: 'icmp',
             FromPort: -1,
